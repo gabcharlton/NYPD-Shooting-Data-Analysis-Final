@@ -1,0 +1,327 @@
+---
+title: "NYPD Shooting Incident Data (Historic) [5301 - Data Science As A Field]"
+author: "Gabrielle Charlton"
+output: html_document
+---
+# Introduction 
+
+This notebook is my analysis of the NYPD Shooting Incident data, obtained from the US government website, catalog.data.gov.
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+**Questions**
+
+Today I am hoping to answer a few questions while exploring my data. For this I decided to have the eyes of someone who is interested in moving to New York, but is part of a vulnerable sector in the US. As a result, I want to know how safe my new home will be. The three main questions I ask are:
+
+* What areas are the safest?
+* What segment of the population of New York City most vulnerable to gun violence?
+* What time of day and year are most likely correlated with increased levels of gun violence?
+
+My goals is that these questions will give a comprehensive view on where my model person, being a black, 26 year old woman will be safe if they were to move to New York City.
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+**Obtain Data**
+
+First, we imported the package "tidyverse", which is the ,most popular package for analysis in R. Later on we will mutate date data from being a "character" to having a reproducible local time. To do this, we will also import "lubricate" at the beginning. 
+
+```{r}
+library(tidyverse)
+library(lubridate) 
+```
+
+Next we use a function that will pull in data from the government page that contains historical NYPD shooting incident data. The link to the raw data is:
+- "https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic/resource/c564b578-fd8a-4005-8365-34150d306cc4"
+
+From this file we want to pull in one specific csv files with a specific name for easy reference. This necessary csv file, with its respective referential name is:
+- https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD to NY_Data
+
+```{r}
+url_in <- "https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic/resource/c564b578-fd8a-4005-8365-34150d306cc4"
+file_name <- c("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+NY_Data <- read_csv(file_name)
+```
+Now we look at our New York data, to get an overview of what we were able to pull.
+
+```{r}
+NY_Data
+summary(NY_Data)
+colnames(NY_Data)
+```
+From this, we know we have the following columns of data:
+
+* "INCIDENT_KEY"
+* "OCCUR_DATE"
+* "OCCUR_TIME"
+* "BORO"
+* "LOC_OF_OCCUR_DESC"      
+* "PRECINCT"
+* "JURISDICTION_CODE"
+* "LOC_CLASSFCTN_DESC"
+* "LOCATION_DESC"
+* "STATISTICAL_MURDER_FLAG"
+* "PERP_AGE_GROUP"
+* "PERP_SEX"
+* "PERP_RACE"
+* "VIC_AGE_GROUP"
+* "VIC_SEX"                
+* "VIC_RACE"
+* "X_COORD_CD"
+* "Y_COORD_CD"
+* "Latitude"
+* "Longitude"              
+* "Lon_Lat"  
+
+Based on our questions, the main columns we need are:
+
+* "INCIDENT_KEY"
+* "OCCUR_DATE"
+* "OCCUR_TIME"
+* "BORO"
+* "JURISDICTION_CODE"
+* "VIC_AGE_GROUP"
+* "VIC_SEX"                
+* "VIC_RACE"
+
+If we wanted to ask more questions such as: 
+
+* What is the proportional number of perpetrators' age, race and sex versus their societal representation in the US
+* What is the most likely group of people to conduct gun violence against our model person
+* What is the proportional number of suspects per precinct against their age, sex and race
+
+we can also use:
+
+* "PERP_AGE_GROUP"
+* "PERP_SEX"
+* "PERP_RACE"
+* "PRECINCT"
+
+For this project, I will only stick to the three main questions I has stated at the beginning, but it would be interesting to dive in deeper later on so I will not remove them from my data frame.
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Transform and Tidy
+
+**Omission and Transformations**
+
+It's best that we transform our NY_data by removing latitude data,longitude data, X and Y coordinate data, location description data, because while they would be great for creating heat maps and doing more complex geo-spatial analysis, I want to really utilize what I learned in class and work with more simplified graphs for my visualizations. 
+
+I will also be transforming the following columns to their necessary types for better analysis:
+
+* occurrence date from a character type to a month-day-year type from a character type
+
+```{r}
+NY_Data <- NY_Data %>%
+  select (-c(Latitude, Longitude, X_COORD_CD,Y_COORD_CD, Lon_Lat, LOC_OF_OCCUR_DESC, LOC_CLASSFCTN_DESC)) %>%
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE))
+
+NY_Data
+summary(NY_Data)
+```
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Visualizations
+
+**Question 1: What areas are the safest?**
+
+For this question, I want to see what areas are the safest (and alternatively, not the safest) in New York for my person to move to. For this I will need:
+
+* the different boroughs
+* The corresponding number of cases per borough
+
+First, let's count the number of cases in the entire dataframe:
+```{r}
+num_entries <- nrow(NY_Data)
+num_entries
+```
+Now let's look at how many cases are associated with each borough.
+```{r}
+boro_cases <- NY_Data %>% 
+  group_by(BORO) %>%
+  tally()
+
+boro_cases
+```
+
+Let's try a box plot to showcase these boroughs against the number of cases.
+
+
+```{r}
+barplot(n~BORO, 
+        aggregate(n~BORO, boro_cases, sum), 
+        main="Borough versus Number of Cases",
+        xlab="Borough",
+        ylab="Number of Cases",
+        cex.names=0.5,
+        col = "pink")
+```
+
+From the numbers, it looks like Staten Island has the lowest number of cases recorded, and Brooklyn has the highest. The only thing I will be cautious about however, is that this is not indicative of the overall population densities of each area. Meaning, that while one area maybe higher than another, if the population is much larger then the previous, the amount of gun violence for that region is proportionally less, and therefore it would be safer for our model person. We will work with the Statistical murder flag value to tell us exactly whether or not our values are safer in relation to each other.
+```{r}
+ggplot(NY_Data, aes(x = BORO, y = STATISTICAL_MURDER_FLAG, fill = STATISTICAL_MURDER_FLAG, colour = STATISTICAL_MURDER_FLAG)) + 
+  geom_bar(stat = "identity")+
+  theme(axis.text.x = element_text(angle = 90)) + 
+  labs(title = "Statistical Murder Flag per Borough versus Number of Cases",
+       x = "Borough",
+       y = "Number of Cases")
+```
+
+**Summary for Question 1**
+
+From our graph, it looks like, in terms of population density, Staten Island, while having the lowest number of cases overall, has the highest statistical murder flag per section, in comparison to the other boroughs. Conversely, the area with the highest number of cases, Brooklyn, had a much lower distribution of statistical murder cases in comparison to it's over number of cases. All of the areas seem to have a statistical murder count about 1/3 of their total number of cases, which means the best for my model to choose is an area withe the lowest total number of cases, being Staten Island, followed by Manhattan, then Queens.
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+**Question 2: What segment of the population of New York City is most vulnerable to gun violence?**
+
+Now that we've dived into the locations' aspects, let's try to answer the question on our model herself for what is the most vulnerable segment to gun violence in New York. 
+We know our overall population for this data set is 27,312. Let's use:
+```{r}
+race_cases <- NY_Data %>% 
+  group_by(VIC_RACE) %>%
+  count()
+
+race_cases
+
+age_cases <- NY_Data %>% 
+  group_by(VIC_AGE_GROUP) %>%
+  count()
+
+age_cases
+
+sex_cases <- NY_Data %>% 
+  group_by(VIC_SEX) %>%
+  count()
+
+sex_cases
+
+```
+```{r}
+#barplot(n~VIC_RACE, aggregate(n~VIC_RACE, race_cases, sum))
+ggplot(race_cases, aes(x = VIC_RACE, y = n, fill= VIC_RACE, colour = VIC_RACE)) + 
+  geom_bar(stat = "identity")+
+  theme(axis.text.x = element_text(angle = 90)) + 
+  labs(title = "Victims' Race versus Number of Cases",
+       x = "Victims' Race",
+       y = "Number of Cases")
+```
+```{r}
+ggplot(age_cases, aes(x = VIC_AGE_GROUP, y = n, fill= VIC_AGE_GROUP, colour = VIC_AGE_GROUP)) + 
+  geom_bar(stat = "identity")+ 
+  theme(axis.text.x = element_text(angle = 90)) + 
+  labs(title = "Victims' Age Groups versus Number of Cases",
+       x = "Victims' Age Groups",
+       y = "Number of Cases")
+```
+
+
+```{r}
+ggplot(sex_cases, aes(x = VIC_SEX, y = n, fill= VIC_SEX, colour = VIC_SEX)) + 
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90)) + 
+  labs(title = "Victims' Sex versus Number of Cases",
+       x = "Victims' Sex",
+       y = "Number of Cases")
+
+```
+
+**Summary of Question 2**
+It looks like the most vulnerable group of people in New York to gun violence is black men withing the 18 to 44 age range. Considering our model person is a black person with the 18 to 44 age range, she is statistically more likely to experience gun violence if she were to move to New York based on two out of three of her characteristics. 
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+**Question 3: What time of day and year are most likely correlated with increased levels of gun violence?**
+What should our model person consider about her behaviors while there? Here we will dive into the best conditions our person should consider when moving in order to be the safest she can be. I want to look at the number of cases in comparison to the hour, day and month, so our model knows when to be most cautious.
+
+```{r}
+
+#df$month <- month(mdy(df$date))
+NY_Data$Occur_day <- wday(NY_Data$OCCUR_DATE) #already transformed earlier
+NY_Data$Occur_month <- month(NY_Data$OCCUR_DATE)
+NY_Data$Occur_hour <-  hour(hms(as.character(NY_Data$OCCUR_TIME)))
+
+day_cases <- NY_Data %>% 
+  group_by(Occur_day) %>%
+  count()
+
+month_cases <- NY_Data %>%
+  group_by(Occur_month) %>%
+  count()
+
+hour_cases <- NY_Data %>% 
+  group_by(Occur_hour) %>%
+  count()
+
+day_cases
+month_cases
+hour_cases
+```
+
+
+```{r}
+ggplot(day_cases, aes(x = Occur_day, y = n, fill= Occur_day, colour = Occur_day)) + 
+  geom_bar(stat = "identity")+
+  theme(legend.position = "bottom") + 
+  labs(title = "Number of Incidences That Occur During The Week",
+       x = "Week Day",
+       y = "Number of Cases")
+```
+
+From our data, it looks like the most dangerous day for gun violence is on the weekends, Saturday and Sunday, and the lowest is Wednesday.
+
+```{r}
+ggplot(month_cases, aes(x = Occur_month, y = n, fill= Occur_month, colour = Occur_month)) + 
+  geom_bar(stat = "identity")+
+    theme(legend.position = "bottom") + 
+  labs(title = "Number of Incidences That Occur During The Year",
+       x = "Month",
+       y = "Number of Cases")
+```
+
+From our data, it looks like the most dangerous months for gun violence are mid-year, June and July, and the lowest is February.
+
+```{r}
+ggplot(hour_cases, aes(x = Occur_hour, y = n, fill= Occur_hour, colour = Occur_hour)) + 
+  geom_bar(stat = "identity")+
+    theme(legend.position = "bottom") + 
+  labs(title = "Number of Incidences That Occur During The Day",
+       x = "Hour",
+       y = "Number of Cases")
+```
+
+
+From our data, it looks like the most dangerous hours for gun violence are in the middle of the night between 9pm and 1am, and the lowest is morning until afternoon between 6am and 12pm.
+
+
+**Summary of Question 3**
+These trends are very interesting because it really showcases human behaviors. During midyear, school is out, the weather is mostly favorable and travel is pretty high, resulting i more common foot traffic. During the weekend, there is usually more people free and available as well, which we can substantiate through our findings. The opposite can be said during February where it is usually the middle of winter, and going outside is less favorable. The same for our hours analysis, where the hours people are usually asleep and there is less foot traffic/ witnesses, gun violence tends to be higher. 
+
+In conclusion, the most favorable environment for gun violence to occur is during a time when people are generally free from school/ work (weekends), more mobile (mid-year) and have less witnesses to their crimes (late at night). If our model person wants to move to New York, knowing what conditions she should consider for her environment in order to be safe will better arm her with making the right decision for her.
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+### Bias
+The bias that I had going into this two fold. I am very aware of the systematic racism at play in the US, primarily against black people, and my initial reaction to having to do this as my project was feeling uncomfortable and that I wouldn't be able to give this serious topic enough grace it deserves. Another thing I had was a lack knowledge of the actual culture in New York, as I've never been there and have only gathered residual information from the media (tv shows, movies, etc.). I think creating a character with my characteristics (a black 26 year old woman looking to move to a new city) really helped me to step outside of my comfort zone and helped me to build confidence to try something new.
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Conclusion
+
+In conclusion, I was able to begin answering the three questions I had set:
+
+**What areas are the safest?**
+I found that the area with the lowest number of cases was Staten Island, but the number of statistical murder cases versus the overall distribution of cases in Staten Island was the largest of all. Conversely, the area with the highest number of cases, Brooklyn, had a much lower distribution of statistical murder cases in comparison to its over number of cases. All of the areas seem to have a statistical murder count of about 1/3 of their total number of cases, which means the best for my model to choose is an area with the lowest total number of cases, Staten Island, followed by Manhattan, then Queens.
+
+**What segment of the population of New York City is most vulnerable to gun violence?**
+From the analysis, it looks like the segment of the population most vulnerable to gun violence is black men within the 18 to 44 age range. Considering my model is a 26-year-old black woman, having two out of three characteristics with a high statistical chance of being hurt by gun violence does help give the model some perspective on what to choose. 
+
+**What time of day and year are most likely correlated with increased levels of gun violence?**
+I looked at the hour of the day, day of the week, and month of the year where the gun violence took place, and it turns out that a person is more likely to experience gun violence between 9 pm and 1 am, on weekends (Saturday and Sunday) and during the mid-year(June and July). On the other hand, the best time for our model to explore her new city is between 6 am to 12 pm, mid-week (Wednesdays) in February (mid-winter).
+This analysis taught me a lot about human behavior and how it can affect how likely crime is or wouldn't normally occur. 
+
+**What would I suggest to my model?**
+Currently, I think this analysis _begins_ to answer questions, but with more data and background knowledge, I'm certain I will be able to give a more comprehensive idea of the best choice for my model on where she should decide to live. 
+
+**Next steps?**
+I would love to work on this data set in the future, possibly answering some of the additional questions I asked earlier in the report.
+
